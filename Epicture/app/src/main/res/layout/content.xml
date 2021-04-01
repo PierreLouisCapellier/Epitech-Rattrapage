@@ -44,6 +44,16 @@
                 android:text="Favorites"
                 android:textColor="@android:color/white"/>
             <Button
+                android:background="@drawable/custom_button"
+                android:layout_marginStart="5dp"
+                android:layout_weight="1"
+                android:layout_gravity="end"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@android:color/white"
+                android:text="Upload"
+                android:id="@+id/upload"/>
+            <Button
                 android:id="@+id/button_compte"
                 android:layout_marginStart="5dp"
                 android:layout_width="wrap_content"

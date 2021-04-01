@@ -5,24 +5,32 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import android.annotation.SuppressLint;
+import android.content.Intent;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Rect;
+import android.net.Uri;
 import android.os.Bundle;
+import android.provider.MediaStore;
+import android.util.Base64;
 import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.TextView;
 
 import com.squareup.picasso.Picasso;
 
+import org.jetbrains.annotations.NotNull;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -43,14 +51,20 @@ public class MainActivity extends AppCompatActivity {
     private static final String TAG = "MyActivity";
     private static class Photo {
         String id;
+        String link;
         String title;
     }
     ImageView profilePicture;
     Button acc;
     Button fav;
     Button actu;
+    Button upload;
     Button userImg;
     String accessToken;
+    public static final int PICK_IMAGE = 1;
+    String encodedImg;
+    public static final MediaType JSON
+            = MediaType.parse("application/json; charset=utf-8");
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -148,6 +162,11 @@ public class MainActivity extends AppCompatActivity {
         fav = findViewById(R.id.button_fav);
         acc = findViewById(R.id.button_compte);
         userImg = findViewById(R.id.button_userimage);
+        upload = findViewById(R.id.upload);
+
+        upload.setOnClickListener(view -> {
+            uploadPhoto(username, accessToken);
+        });
 
         fav.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -205,6 +224,7 @@ public class MainActivity extends AppCompatActivity {
                                 photo.id = item.getString("id");
                             }
                             photo.title = item.getString("title");
+                            photo.link = item.getString("link");
                             photos.add(photo); // Add photo to list
                             runOnUiThread(new Runnable() {
                                 @Override
@@ -460,8 +480,14 @@ public class MainActivity extends AppCompatActivity {
     private class PhotoVH extends RecyclerView.ViewHolder {
         ImageView photo;
         TextView title;
+        TextView nbVote;
         Button fav;
+        Button up;
+        Button Down;
         String id;
+        String link;
+        String NumberUp;
+        String NumberDown;
 
         public PhotoVH(View itemView) {
             super(itemView);
@@ -482,8 +508,8 @@ public class MainActivity extends AppCompatActivity {
                     }
                 };
                 Request request = new Request.Builder()
-                        .url("https://api.imgur.com/3/image/"+ id +"/favorite")
-                        .header("Authorization", "Bearer "+ accessToken)
+                        .url("https://api.imgur.com/3/image/"+id+"/favorite")
+                        .header("Authorization", "Bearer " + accessToken)
                         .post(bdy)
                         .build();
                 httpClient.newCall(request).enqueue(new Callback() {
@@ -498,7 +524,145 @@ public class MainActivity extends AppCompatActivity {
                     }
                 });
             });
+            up = itemView.findViewById(R.id.up);
+            up.setOnClickListener(v -> {
+                nbVote = itemView.findViewById(R.id.nbVote);
+                httpClient = new OkHttpClient.Builder().build();
+                String hash = link.split("/")[4];
+                Log.e("link", link.split("/")[4]);
+                Request voteReq = new Request.Builder()
+                        .url("https://api.imgur.com/3/gallery/" + hash + "/votes")
+                        .header("Authorization", "Client-ID b93b06de61a4531")
+                        .build();
+                RequestBody bdy = new RequestBody() {
+                    @Nullable
+                    @Override
+                    public MediaType contentType() {
+                        return null;
+                    }
 
+                    @Override
+                    public void writeTo(BufferedSink sink) throws IOException {
+
+                    }
+                };
+                Request request = new Request.Builder()
+                        .url("https://api.imgur.com/3/gallery/"+ hash +"/vote/up")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .post(bdy)
+                        .build();
+                httpClient.newCall(request).enqueue(new Callback() {
+                    @Override
+                    public void onFailure(Call call, IOException e) {
+                        Log.e("Data", "Fail Request");
+                    }
+
+                    @Override
+                    public void onResponse(Call call, Response response) throws IOException {
+                        Log.e("Data", response.body().string());
+                        httpClient.newCall(voteReq).enqueue(new Callback() {
+                            @Override
+                            public void onFailure(Call call, IOException e) {
+                                Log.e("Data", "Fail Request");
+                            }
+
+                            @Override
+                            public void onResponse(Call call, Response response) throws IOException {
+                                JSONObject data;
+                                try {
+                                    data = new JSONObject(response.body().string());
+                                    NumberUp = data.getJSONObject("data").getString("ups");
+                                    NumberDown = data.getJSONObject("data").getString("downs");
+                                    runOnUiThread(() -> {
+                                        nbVote.setText("Up: " + NumberUp + ", Down: " + NumberDown);
+                                    });
+                                } catch (JSONException e) {
+                                    e.printStackTrace();
+                                    //nbVote.setText("0");
+                                }
+                            }
+                        });
+                    }
+                });
+
+            });
+            Down = itemView.findViewById(R.id.down);
+            Down.setOnClickListener( v -> {
+                nbVote = itemView.findViewById(R.id.nbVote);
+                httpClient = new OkHttpClient.Builder().build();
+                String hash = link.split("/")[4];
+                Log.e("link", link.split("/")[4]);
+                Request voteReq = new Request.Builder()
+                        .url("https://api.imgur.com/3/gallery/" + hash + "/votes")
+                        .header("Authorization", "Client-ID b93b06de61a4531")
+                        .build();
+                RequestBody bdy = new RequestBody() {
+                    @Nullable
+                    @Override
+                    public MediaType contentType() {
+                        return null;
+                    }
+
+                    @Override
+                    public void writeTo(BufferedSink sink) throws IOException {
+
+                    }
+                };
+                RequestBody bdyVeto = new RequestBody() {
+                    @Nullable
+                    @Override
+                    public MediaType contentType() {
+                        return null;
+                    }
+
+                    @Override
+                    public void writeTo(BufferedSink sink) throws IOException {
+
+                    }
+                };
+                Request request = new Request.Builder()
+                        .url("https://api.imgur.com/3/gallery/"+ hash +"/vote/down")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .post(bdy)
+                        .build();
+                httpClient.newCall(request).enqueue(new Callback() {
+                    @Override
+                    public void onFailure(Call call, IOException e) {
+                        Log.e("Data", "Fail Request");
+                    }
+
+                    @Override
+                    public void onResponse(Call call, Response response) throws IOException {
+                        Log.e("Data", response.body().string());
+                        runOnUiThread(() -> {
+                            nbVote.setText("Up: " + NumberUp + ", Down: " + NumberDown);
+                        });
+                        httpClient.newCall(voteReq).enqueue(new Callback() {
+                            @Override
+                            public void onFailure(Call call, IOException e) {
+                                Log.e("Data", "Fail Request");
+                            }
+
+                            @SuppressLint("SetTextI18n")
+                            @Override
+                            public void onResponse(Call call, Response response) throws IOException {
+                                JSONObject data;
+                                try {
+                                    data = new JSONObject(response.body().string());
+                                    NumberUp = data.getJSONObject("data").getString("ups");
+                                    NumberDown = data.getJSONObject("data").getString("downs");
+                                    runOnUiThread(() -> {
+                                        nbVote.setText("Up: " + NumberUp + ", Down: " + NumberDown);
+                                    });
+                                } catch (JSONException e) {
+                                    e.printStackTrace();
+                                    //nbVote.setText("0");
+                                }
+                            }
+                        });
+                    }
+                });
+            });
         }
     }
 
@@ -506,7 +670,7 @@ public class MainActivity extends AppCompatActivity {
         RecyclerView rv = (RecyclerView)findViewById(R.id.rv_of_photos);
         rv.setLayoutManager(new LinearLayoutManager(this));
 
-        RecyclerView.Adapter<PhotoVH> adapter = new RecyclerView.Adapter<PhotoVH>() {
+         RecyclerView.Adapter<PhotoVH> adapter = new RecyclerView.Adapter<PhotoVH>() {
             @Override
             public PhotoVH onCreateViewHolder(ViewGroup parent, int viewType) {
                 PhotoVH vh = new PhotoVH(getLayoutInflater().inflate(R.layout.test, null));
@@ -521,6 +685,7 @@ public class MainActivity extends AppCompatActivity {
                         photos.get(position).id + ".jpg").into(holder.photo);
                 holder.title.setText(photos.get(position).title);
                 holder.id = photos.get(position).id;
+                holder.link = photos.get(position).link;
             }
 
             @Override
@@ -538,4 +703,108 @@ public class MainActivity extends AppCompatActivity {
             }
         });
     }
+
+    private void uploadPhoto(final String username, final String accessToken) {
+        setContentView(R.layout.upload_photo);
+        EditText title = findViewById(R.id.title);
+        EditText description = findViewById(R.id.desc);
+        Button choose = findViewById(R.id.choose);
+        Button Upload = findViewById(R.id.upload);
+        JSONObject data = new JSONObject();
+
+        choose.setOnClickListener(v -> {
+            Intent getIntent = new Intent(Intent.ACTION_GET_CONTENT);
+            getIntent.setType("image/*");
+
+            Intent pickIntent = new Intent(Intent.ACTION_PICK, android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+            pickIntent.setType("image/*");
+
+            Intent chooserIntent = Intent.createChooser(getIntent, "Select Image");
+            chooserIntent.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{pickIntent});
+
+            startActivityForResult(chooserIntent, PICK_IMAGE);
+        });
+
+        Upload.setOnClickListener(v -> {
+            try {
+                if (!title.getText().toString().equals(""))
+                    data.put("title", title.getText().toString());
+                if (!description.getText().toString().equals(""))
+                    data.put("description", description.getText().toString());
+                data.put("image", encodedImg);
+                data.put("type", "base64");
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+            RequestBody requestBody = RequestBody.create(JSON, data.toString());
+            Request request = new Request.Builder()
+                    .url("https://api.imgur.com/3/upload")
+                    .header("Authorization", "Bearer " + accessToken)
+                    .post(requestBody)
+                    .build();
+
+            httpClient.newCall(request).enqueue(new Callback() {
+                @Override
+                public void onFailure(@NotNull Call call, @NotNull IOException e) {
+                    Log.e("RESPONSE", "FAIL");
+                }
+
+                @Override
+                public void onResponse(@NotNull Call call, @NotNull Response response) throws IOException {
+                    String res = response.body().string();
+                    JSONObject data = null;
+                    JSONObject params = new JSONObject();
+                    String id = null;
+                    try {
+                        data = new JSONObject(res);
+                        params.put("title", data.getJSONObject("data").getString("title"));
+                        id = data.getJSONObject("data").getString("id");
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                    }
+
+                    //https://api.imgur.com/3/gallery/image/{{imageHash}}
+                    RequestBody requestBody1 = RequestBody.create(JSON, params.toString());
+                    Request request1 = new Request.Builder()
+                            .url("https://api.imgur.com/3/gallery/image/" + id)
+                            .header("Authorization", "Bearer " + accessToken)
+                            .post(requestBody1)
+                            .build();
+                    httpClient.newCall(request1).enqueue(new Callback() {
+                        @Override
+                        public void onFailure(@NotNull Call call, @NotNull IOException e) {
+                            Log.e("RESPONSE", "FAIL");
+                        }
+
+                        @Override
+                        public void onResponse(@NotNull Call call, @NotNull Response response) throws IOException {
+                            Log.e("RESPONSE", response.body().string());
+                        }
+                    });
+                    runOnUiThread(() -> {
+                        setContentView(R.layout.content);
+                        fetchData(username, accessToken);
+                    });
+                }
+            });
+        });
+    }
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == PICK_IMAGE) {
+            try {
+                Uri imageUri = data.getData();
+                Bitmap image = MediaStore.Images.Media.getBitmap(this.getContentResolver(), imageUri);
+                ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+                image.compress(Bitmap.CompressFormat.PNG, 100, byteArrayOutputStream);
+                byte[] byteArray = byteArrayOutputStream .toByteArray();
+
+                encodedImg = Base64.encodeToString(byteArray, Base64.DEFAULT);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
 }
